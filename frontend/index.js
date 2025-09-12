@@ -71,6 +71,8 @@ function mapJobRecords(records) {
             recordList.push({
                 id: record.id,
                 name: record.getCellValue('Job ID'),
+                moStatus: record.getCellValue('MO Status'),
+                moTime: record.getCellValue('MO Time'),
                 quantity: record.getCellValue('Unit Count') ? record.getCellValue('Unit Count')[0].value : 0,
                 priority: record.getCellValue('SortID') || 999
             });
@@ -124,9 +126,9 @@ async function CalculateEstimation(jobs, workstations, jobsTable) {
         formattedResults.orderCompletions.forEach(completion => {
             // Update the corresponding order record in Airtable
             let startDate = new Date();
-            startDate = startDate.addWorkDays(completion.startDate);
+            startDate = startDate.addWorkDays(completion.startDate-1);
             let endDate = new Date();
-            endDate = endDate.addWorkDays(completion.endDate);
+            endDate = endDate.addWorkDays(completion.endDate-1);
             jobsTable.updateRecordAsync(completion.orderId, {
             'Est. Start Date': new Date(startDate),
             'Est. Complete Date': new Date(endDate)

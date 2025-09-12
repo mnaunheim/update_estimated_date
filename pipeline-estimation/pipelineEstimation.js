@@ -33,11 +33,12 @@ export function calculatePipelineEstimation(config) {
   const orderProgress = sortedOrders.map(order => ({
     ...order,
     currentStation: 0,
-    completed: false,
+    completed: order.moStatus === 'Complete',
     startDate: null,
     endDate: null
   }));
-
+  
+  console.log('Sorted Orders:', orderProgress);
   const schedule = [];
   let currentDay = 1;
   let ordersInProgress = [];
@@ -46,13 +47,6 @@ export function calculatePipelineEstimation(config) {
 
   // Continue until all orders are complete
   while (completedOrders.length < sortedOrders.length && currentDay <= 365) {
-    const daySchedule = {
-      day: currentDay,
-      stations: [],
-      ordersStarted: [],
-      ordersCompleted: []
-    };
-
     // Process each workstation for this day
     pipeline.forEach((station, stationIndex) => {
       let hoursWorked = 0;
@@ -65,7 +59,7 @@ export function calculatePipelineEstimation(config) {
           const readyOrder = ordersInProgress.find(order => 
             !order.completed && order.currentStation === stationIndex
           );
-          console.log('Ready Order at Station', stationIndex, ':', readyOrder);
+
           if (readyOrder) {
             // Start processing this order at this station
             station.currentOrder = readyOrder;
@@ -78,10 +72,6 @@ export function calculatePipelineEstimation(config) {
             newOrder.currentStation = 0;
             newOrder.startDate = currentDay;
             ordersInProgress.push(newOrder);
-            daySchedule.ordersStarted.push({
-              orderId: newOrder.id,
-              orderName: newOrder.name
-            });
             nextOrderToStart++;
           }
         }
@@ -110,10 +100,6 @@ export function calculatePipelineEstimation(config) {
               order.completed = true;
               order.endDate = currentDay;
               completedOrders.push(order);
-              daySchedule.ordersCompleted.push({
-                orderId: order.id,
-                orderName: order.name
-              });
               ordersInProgress = ordersInProgress.filter(o => o.id !== order.id);
             } else {
               // Move to next station
@@ -133,17 +119,8 @@ export function calculatePipelineEstimation(config) {
           break;
         }
       }
-
-      daySchedule.stations.push({
-        stationId: station.id,
-        stationName: station.name,
-        activity: stationActivity,
-        currentOrderId: station.currentOrder?.id || null,
-        currentOrderName: station.currentOrder?.name || null
-      });
     });
 
-    schedule.push(daySchedule);
     currentDay++;
   }
 
@@ -181,19 +158,7 @@ export function formatForAirtable(results) {
     totalOrders: results.completedOrders.length,
     
     // Order completion data for updating order records
-    orderCompletions: getOrderCompletionDates(results),
-    
-    // Daily schedule (first 30 days) for overview
-    dailySchedule: results.schedule.slice(0, 30).map(day => ({
-      day: day.day,
-      ordersStarted: day.ordersStarted.map(o => o.orderName),
-      ordersCompleted: day.ordersCompleted.map(o => o.orderName),
-      stationActivities: day.stations.map(station => ({
-        stationName: station.stationName,
-        currentOrder: station.currentOrderName,
-        isIdle: !station.currentOrderName
-      }))
-    }))
+    orderCompletions: getOrderCompletionDates(results),    
   };
 }
 
