@@ -65,16 +65,16 @@ export function calculatePipelineEstimation(config) {
           const readyOrder = ordersInProgress.find(order => 
             !order.completed && order.currentStation === stationIndex
           );
-
+          console.log('Ready Order at Station', stationIndex, ':', readyOrder);
           if (readyOrder) {
             // Start processing this order at this station
             station.currentOrder = readyOrder;
-            station.remainingHours = station.hoursRequired;
+            station.remainingHours = station.hoursRequired * readyOrder.quantity;
           } else if (stationIndex === 0 && nextOrderToStart < sortedOrders.length) {
             // First station can start new orders
             const newOrder = orderProgress[nextOrderToStart];
             station.currentOrder = newOrder;
-            station.remainingHours = station.hoursRequired;
+            station.remainingHours = station.hoursRequired * newOrder.quantity;
             newOrder.currentStation = 0;
             newOrder.startDate = currentDay;
             ordersInProgress.push(newOrder);

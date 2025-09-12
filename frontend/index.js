@@ -22,7 +22,6 @@ function TodoExtenstion() {
         const fetchData = async ()  => {
             try {
                 setLoading(true);
-                console.log('Record Ids in view:' , recordSort);
                 const { workstations, jobs } = await FetchInitialData(jobsTable, workstationsTable);
                                 
                 // Use the fetched data directly, not state
@@ -80,14 +79,39 @@ function mapJobRecords(records) {
     return recordList
 }
 
-Date.prototype.addDays = function(days) {
-    var date = new Date(this.valueOf());
-    date.setDate(date.getDate() + days);
-    return date;
+Date.prototype.addWorkDays = function(days) {
+    if(isNaN(days)) {
+        console.log("Value provided for \"days\" was not a number");
+        return
+    }
+    var newDate = new Date(this.valueOf());
+    // Get the day of the week as a number (0 = Sunday, 1 = Monday, .... 6 = Saturday)
+    var dow = newDate.getDay();
+    var daysToAdd = parseInt(days);
+    // If the current day is Sunday add one day
+    if (dow == 0) {
+        daysToAdd++;
+    }
+    // If the start date plus the additional days falls on or after the closest Saturday calculate weekends
+    if (dow + daysToAdd >= 6) {
+        //Subtract days in current working week from work days
+        var remainingWorkDays = daysToAdd - (5 - dow);
+        //Add current working week's weekend
+        daysToAdd += 2;
+        if (remainingWorkDays > 5) {
+            //Add two days for each working week by calculating how many weeks are included
+            daysToAdd += 2 * Math.floor(remainingWorkDays / 5);
+            //Exclude final weekend if the remainingWorkDays resolves to an exact number of weeks
+            if (remainingWorkDays % 5 == 0)
+                daysToAdd -= 2;
+        }
+    }
+    return newDate.setDate(newDate.getDate() + daysToAdd);
 }
 
 async function CalculateEstimation(jobs, workstations, jobsTable) {
-        try {       
+        try {    
+        // Calculate pipeline estimation       
         const results = calculatePipelineEstimation({
             hoursPerDay: 8,
             workstations,
@@ -100,26 +124,14 @@ async function CalculateEstimation(jobs, workstations, jobsTable) {
         formattedResults.orderCompletions.forEach(completion => {
             // Update the corresponding order record in Airtable
             let startDate = new Date();
-            startDate = startDate.addDays(completion.startDate);
+            startDate = startDate.addWorkDays(completion.startDate);
             let endDate = new Date();
-            endDate = endDate.addDays(completion.endDate);
+            endDate = endDate.addWorkDays(completion.endDate);
             jobsTable.updateRecordAsync(completion.orderId, {
             'Est. Start Date': new Date(startDate),
             'Est. Complete Date': new Date(endDate)
             });
         });
-
-        /* Update records without triggering useRecords
-        await Promise.all(
-            results.completedOrders.map(async (order) => {
-            let startDate = new Date();
-            console.log(`Updating record ${order.id} with start date ${startDate.addDays(order.startDate)} and end date ${startDate.addDays(order.endDate)}`);
-            await jobsTable.updateRecordAsync(order.id, {
-                'Est. Start Date': startDate.addDays(order.startDate),
-                'Est. Complete Date': startDate.addDays(order.endDate)
-            });
-            })
-        );*/
 
         } catch (error) {
         console.error('Error:', error);
