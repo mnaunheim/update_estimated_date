@@ -25,7 +25,8 @@ function TodoExtenstion() {
             try {
                 setLoading(true);
                 const { workstations, jobs } = await FetchInitialData(jobsTable, workstationsTable);
-                                
+                setWorkstations(workstations);
+                setJobs(jobs);               
                 // Use the fetched data directly, not state
                 CalculateEstimation(jobs, workstations, jobsTable);
             } catch (error) {
@@ -50,8 +51,7 @@ async function FetchInitialData(jobsTable, workstationsTable) {
         name: record.getCellValue('Workstation Name'),
         hoursRequired: record.getCellValue('Time per Cabinet')
     }));
-    setWorkstations(workstations);
-
+    
     //Fetch jobs sorted by SortID
     const opts = {
         sorts: [{field: 'SortID', direction: 'asc'}]
@@ -59,7 +59,6 @@ async function FetchInitialData(jobsTable, workstationsTable) {
     let jobsQuery = await jobsTable.selectRecordsAsync(opts);
 
     let jobs = mapJobRecords(jobsQuery.records);
-    setJobs(jobs);
 
     // Clean up queries
     workstationsQuery.unloadData();
