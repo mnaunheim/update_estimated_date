@@ -12,6 +12,8 @@ function TodoExtenstion() {
 
     const [tableName, setTableName] = useState('Jobs');
     const [loading, setLoading] = useState(true);
+    const [workstations, setWorkstations] = useState([]);
+    const [jobs, setJobs] = useState([]);
 
     const jobsTable = base.getTableByNameIfExists(tableName);
     const workstationsTable = base.getTableByNameIfExists('Workstations');
@@ -48,13 +50,16 @@ async function FetchInitialData(jobsTable, workstationsTable) {
         name: record.getCellValue('Workstation Name'),
         hoursRequired: record.getCellValue('Time per Cabinet')
     }));
+    setWorkstations(workstations);
 
+    //Fetch jobs sorted by SortID
     const opts = {
         sorts: [{field: 'SortID', direction: 'asc'}]
     };
     let jobsQuery = await jobsTable.selectRecordsAsync(opts);
 
     let jobs = mapJobRecords(jobsQuery.records);
+    setJobs(jobs);
 
     // Clean up queries
     workstationsQuery.unloadData();
@@ -66,8 +71,10 @@ function mapJobRecords(records) {
     let recordList = [];
     for (let record of records) {
         let installStatus = record.getCellValue('Install Status');
+        let moStatus = record.getCellValue('MO Status');
+        let moTime = record.getCellValue('MO Time');
         //Remove any jobs that are completed
-        if(installStatus[0].value != 'Complete'){
+        if(installStatus[0].value != 'Complete' && moStatus != 'Complete' && moTime == 0) {
             recordList.push({
                 id: record.id,
                 name: record.getCellValue('Job ID'),
