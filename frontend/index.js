@@ -49,7 +49,8 @@ async function FetchInitialData(jobsTable, workstationsTable) {
     let workstations = workstationsQuery.records.map(record => ({
         id: record.id,
         name: record.getCellValue('Workstation Name'),
-        hoursRequired: record.getCellValue('Time per Cabinet')
+        hoursRequired: record.getCellValue('Time per Cabinet'),
+        setupTime: record.getCellValue('Setup Time') || 0
     }));
     
     //Fetch jobs sorted by SortID
@@ -155,11 +156,13 @@ function calculateJobEstimates(hoursPerDay, workstations, jobs) {
     let completedJobs = [];
 
     const totalPerCabinet = workstations.reduce((sum, ws) => sum + (ws.hoursRequired || 0), 0);
+    const totalSetupTime = workstations.reduce((sum, ws) => sum + (ws.setupTime || 0), 0);
+    console.log('Total setup time:', totalSetupTime);
     console.log('Total hours per cabinet:', totalPerCabinet);
     let startDate = 1
     let runningHours = 0 
     for (let job of jobs){
-        const jobTotalHours = (job.quantity || 0) * totalPerCabinet;
+        const jobTotalHours = ((job.quantity || 0) * totalPerCabinet)+ totalSetupTime;
         job.totalHours = jobTotalHours;
         job.totalDays = Math.ceil(jobTotalHours / (hoursPerDay*workstations.length));
         console.log(`Job ${job.name} - Total Hours: ${jobTotalHours}, Total Days: ${job.totalDays}`);
