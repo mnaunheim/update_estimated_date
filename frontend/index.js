@@ -17,7 +17,7 @@ function TodoExtenstion() {
 
     const jobsTable = base.getTableByNameIfExists(tableName);
     const workstationsTable = base.getTableByNameIfExists('Workstations');
-    const view = jobsTable.getViewByNameIfExists('Grid view');
+    const view = jobsTable.getViewByNameIfExists('Sorted Grid');
     const recordSort = useRecordIds(view);
     
     useEffect(() => {
@@ -68,12 +68,14 @@ async function FetchInitialData(jobsTable, workstationsTable) {
 //Map Airtable records to job objects
 function mapJobRecords(records) {
     let recordList = [];
+    console.log('Mapped Jobs:', records);
     for (let record of records) {
         let installStatus = record.getCellValue('Install Status');
         let moStatus = record.getCellValue('MO Status');
         let moTime = record.getCellValue('MO Time');
+        let cabinetLine = record.getCellValue('Cabinet Line');
         //Remove any jobs that are completed
-        if(installStatus[0].value != 'Complete' && moStatus != 'Complete' && moTime == 0) {
+        if(installStatus[0].value != 'Complete' && moStatus != 'Complete') {
             recordList.push({
                 id: record.id,
                 name: record.getCellValue('Job ID'),
@@ -84,6 +86,7 @@ function mapJobRecords(records) {
             });
         }
     }
+
     return recordList
 }
 
@@ -120,16 +123,19 @@ Date.prototype.addWorkDays = function(days) {
 async function CalculateEstimation(jobs, workstations, jobsTable) {
         try {    
         // Calculate pipeline estimation       
-        const results = calculatePipelineEstimation({
+        /*const results = calculatePipelineEstimation({
             hoursPerDay: 8,
             workstations,
             jobs
         });
+        */
+
+        const results = calculateJobEstimates(8, workstations, jobs);
         // Format for Airtable usage
-        const formattedResults = formatForAirtable(results);
+        //const formattedResults = formatForAirtable(results);
 
         // Update order records with completion dates
-        formattedResults.orderCompletions.forEach(completion => {
+        results.orderCompletions.forEach(completion => {
             // Update the corresponding order record in Airtable
             let startDate = new Date();
             startDate = startDate.addWorkDays(completion.startDate-1);
@@ -145,5 +151,36 @@ async function CalculateEstimation(jobs, workstations, jobsTable) {
         console.error('Error:', error);
         } 
     };
+function calculateJobEstimates(hoursPerDay, workstations, jobs) {
+    let completedJobs = [];
+
+    const totalPerCabinet = workstations.reduce((sum, ws) => sum + (ws.hoursRequired || 0), 0);
+    console.log('Total hours per cabinet:', totalPerCabinet);
+    let startDate = 1
+    let runningHours = 0 
+    for (let job of jobs){
+        const jobTotalHours = (job.quantity || 0) * totalPerCabinet;
+        job.totalHours = jobTotalHours;
+        job.totalDays = Math.ceil(jobTotalHours / (hoursPerDay*workstations.length));
+        console.log(`Job ${job.name} - Total Hours: ${jobTotalHours}, Total Days: ${job.totalDays}`);
+        job.startDate = startDate; 
+        job.endDate = startDate + job.totalDays;
+        job.orderId = job.id;
+        completedJobs.push(job);
+
+        runningHours += jobTotalHours;
+        let remainingHours = runningHours % (hoursPerDay*workstations.length);
+
+        startDate += Math.floor(runningHours / (hoursPerDay*workstations.length));
+        console.log(`After Job ${job.name} - Running Hours: ${runningHours}, Remaining Hours:${remainingHours}, Next Start Date: ${startDate}`);
+        if(remainingHours >0){
+            runningHours = remainingHours;
+        }
+        
+    }
+
+    return { orderCompletions: completedJobs };
+        
+}
 
 initializeBlock(() => <TodoExtenstion />);
