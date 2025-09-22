@@ -68,7 +68,6 @@ async function FetchInitialData(jobsTable, workstationsTable) {
 //Map Airtable records to job objects
 function mapJobRecords(records) {
     let recordList = [];
-    console.log('Mapped Jobs:', records);
     for (let record of records) {
         let installStatus = record.getCellValue('Install Status');
         let moStatus = record.getCellValue('MO Status');
@@ -86,7 +85,6 @@ function mapJobRecords(records) {
             });
         }
     }
-
     return recordList
 }
 
@@ -151,11 +149,11 @@ function calculateJobEstimates(hoursPerDay, workstations, jobs) {
     let startDate = 1
     let runningHours = 0 
     for (let job of jobs){
-        const jobTotalHours = job.moTime > 0 ? job.moTime : ((job.quantity || 0) * totalPerCabinet) + totalSetupTime;
-
+        //const jobTotalHours = job.moTime > 0 ? job.moTime : ((job.quantity || 0) * totalPerCabinet) + totalSetupTime;
+        
+        const jobTotalHours = job.cabinetLine == "JG Customs" ? (job.quantity || 0) * totalPerCabinet + totalSetupTime : 0;
         job.totalHours = jobTotalHours;
         job.totalDays = Math.ceil(jobTotalHours / (hoursPerDay*workstations.length));
-        console.log(`Job ${job.name} - Total Hours: ${jobTotalHours}, Total Days: ${job.totalDays}`);
         job.startDate = startDate; 
         job.endDate = startDate + job.totalDays;
         job.orderId = job.id;
@@ -165,15 +163,12 @@ function calculateJobEstimates(hoursPerDay, workstations, jobs) {
         let remainingHours = runningHours % (hoursPerDay*workstations.length);
 
         startDate += Math.floor(runningHours / (hoursPerDay*workstations.length));
-        console.log(`After Job ${job.name} - Running Hours: ${runningHours}, Remaining Hours:${remainingHours}, Next Start Date: ${startDate}`);
         if(remainingHours >0){
             runningHours = remainingHours;
-        }
-        
+        }   
     }
 
-    return { orderCompletions: completedJobs };
-        
+    return { orderCompletions: completedJobs }; 
 }
 
 initializeBlock(() => <TodoExtenstion />);
