@@ -1,11 +1,9 @@
 import {initializeBlock,
     useBase,
-    useRecords,
     useRecordIds
 } from '@airtable/blocks/ui';
 import React, {useEffect, useState} from 'react';
 import './style.css';
-import { calculatePipelineEstimation, formatForAirtable } from '../pipeline-estimation/pipelineEstimation';
 
 function TodoExtenstion() {
     const base = useBase();
@@ -66,6 +64,7 @@ async function FetchInitialData(jobsTable, workstationsTable) {
     jobsQuery.unloadData();
     return {workstations, jobs};
 }
+
 //Map Airtable records to job objects
 function mapJobRecords(records) {
     let recordList = [];
@@ -73,7 +72,6 @@ function mapJobRecords(records) {
     for (let record of records) {
         let installStatus = record.getCellValue('Install Status');
         let moStatus = record.getCellValue('MO Status');
-        let moTime = record.getCellValue('MO Time');
         let cabinetLine = record.getCellValue('Cabinet Line');
         //Remove any jobs that are completed
         if(installStatus[0].value != 'Complete' && moStatus != 'Complete') {
@@ -81,7 +79,7 @@ function mapJobRecords(records) {
                 id: record.id,
                 name: record.getCellValue('Job ID'),
                 cabinetLine: cabinetLine ? cabinetLine[0].value : null,
-                moStatus: record.getCellValue('MO Status'),
+                moStatus: moStatus,
                 moTime: record.getCellValue('MO Time'),
                 quantity: record.getCellValue('Unit Count') ? record.getCellValue('Unit Count')[0].value : 0,
                 priority: record.getCellValue('SortID') || 999
@@ -153,7 +151,8 @@ function calculateJobEstimates(hoursPerDay, workstations, jobs) {
     let startDate = 1
     let runningHours = 0 
     for (let job of jobs){
-        const jobTotalHours = ((job.quantity || 0) * totalPerCabinet)+ totalSetupTime;
+        const jobTotalHours = job.moTime > 0 ? job.moTime : ((job.quantity || 0) * totalPerCabinet) + totalSetupTime;
+
         job.totalHours = jobTotalHours;
         job.totalDays = Math.ceil(jobTotalHours / (hoursPerDay*workstations.length));
         console.log(`Job ${job.name} - Total Hours: ${jobTotalHours}, Total Days: ${job.totalDays}`);
