@@ -80,6 +80,7 @@ function mapJobRecords(records) {
             recordList.push({
                 id: record.id,
                 name: record.getCellValue('Job ID'),
+                cabinetLine: cabinetLine ? cabinetLine[0].value : null,
                 moStatus: record.getCellValue('MO Status'),
                 moTime: record.getCellValue('MO Time'),
                 quantity: record.getCellValue('Unit Count') ? record.getCellValue('Unit Count')[0].value : 0,
@@ -123,17 +124,7 @@ Date.prototype.addWorkDays = function(days) {
 
 async function CalculateEstimation(jobs, workstations, jobsTable) {
         try {    
-        // Calculate pipeline estimation       
-        /*const results = calculatePipelineEstimation({
-            hoursPerDay: 8,
-            workstations,
-            jobs
-        });
-        */
-
         const results = calculateJobEstimates(8, workstations, jobs);
-        // Format for Airtable usage
-        //const formattedResults = formatForAirtable(results);
 
         // Update order records with completion dates
         results.orderCompletions.forEach(completion => {
