@@ -15,8 +15,8 @@ function TodoExtenstion() {
 
     const jobsTable = base.getTableByNameIfExists(tableName);
     const workstationsTable = base.getTableByNameIfExists('Workstations');
-    const view = jobsTable.getViewByNameIfExists('Sorted Grid');
-    const recordSort = useRecordIds(view);
+    const view = jobsTable.getViewByNameIfExists('Grid view');
+    const girdRecords = useRecordIds(view);
     
     useEffect(() => {
         const fetchData = async ()  => {
@@ -34,7 +34,7 @@ function TodoExtenstion() {
             }
         };
         fetchData();
-    }, [recordSort]);
+    }, [girdRecords]);
 
     if (loading) return <div>Updating records...</div>;
     return (
