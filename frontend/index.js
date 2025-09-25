@@ -15,7 +15,7 @@ function TodoExtenstion() {
 
     const jobsTable = base.getTableByNameIfExists(tableName);
     const workstationsTable = base.getTableByNameIfExists('Workstations');
-    const view = jobsTable.getViewByNameIfExists('Grid view');
+    const view = jobsTable.getViewByNameIfExists('Sorted Grid');
     const girdRecords = useRecordIds(view);
     
     useEffect(() => {
@@ -131,7 +131,8 @@ async function CalculateEstimation(jobs, workstations, jobsTable) {
             endDate = endDate.addWorkDays(completion.endDate-1);
             jobsTable.updateRecordAsync(completion.orderId, {
             'Est. Start Date': new Date(startDate),
-            'Est. Complete Date': new Date(endDate)
+            'Est. Complete Date': new Date(endDate),
+            'Days to Complete': completion.totalDays
             });
         });
 
