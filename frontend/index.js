@@ -10,11 +10,11 @@ function TodoExtenstion() {
 
     const [tableName, setTableName] = useState('Jobs');
     const [loading, setLoading] = useState(true);
-    const [workstations, setWorkstations] = useState([]);
-    const [jobs, setJobs] = useState([]);
+
 
     const jobsTable = base.getTableByNameIfExists(tableName);
     const workstationsTable = base.getTableByNameIfExists('Workstations');
+    const configTable = base.getTableByNameIfExists('Configuration');
     const view = jobsTable.getViewByNameIfExists('Sorted Grid');
     const girdRecords = useRecordIds(view);
     
@@ -22,11 +22,10 @@ function TodoExtenstion() {
         const fetchData = async ()  => {
             try {
                 setLoading(true);
-                const { workstations, jobs } = await FetchInitialData(jobsTable, workstationsTable);
-                setWorkstations(workstations);
-                setJobs(jobs);               
+                const { workstations, jobs, holidays} = await FetchInitialData(jobsTable, workstationsTable, configTable);
+
                 // Use the fetched data directly, not state
-                CalculateEstimation(jobs, workstations, jobsTable);
+                CalculateEstimation(jobs, workstations, jobsTable, holidays);
             } catch (error) {
                 console.error('Error fetching data:', error);
             } finally {
@@ -42,7 +41,7 @@ function TodoExtenstion() {
     );
 }
 //Get initial data from Airtable
-async function FetchInitialData(jobsTable, workstationsTable) {
+async function FetchInitialData(jobsTable, workstationsTable, configTable) {
     let workstationsQuery = await workstationsTable.selectRecordsAsync();    
     let workstations = workstationsQuery.records.map(record => ({
         id: record.id,
@@ -59,10 +58,23 @@ async function FetchInitialData(jobsTable, workstationsTable) {
 
     let jobs = mapJobRecords(jobsQuery.records);
 
+    let holidaysQuery = await configTable.selectRecordsAsync();
+    let holidayRecords = holidaysQuery.records.map(record => ({
+        name: record.getCellValue('Name'),
+        value: record.getCellValue('Value')
+    }));
+    let holidays = '';
+    holidayRecords.forEach(element => {
+        if(element.name == 'Holidays'){
+            holidays = element.value;
+        }
+    });
+
     // Clean up queries
     workstationsQuery.unloadData();
     jobsQuery.unloadData();
-    return {workstations, jobs};
+    holidaysQuery.unloadData();
+    return {workstations, jobs, holidays};
 }
 
 //Map Airtable records to job objects
@@ -72,23 +84,24 @@ function mapJobRecords(records) {
         let installStatus = record.getCellValue('Install Status');
         let moStatus = record.getCellValue('MO Status');
         let cabinetLine = record.getCellValue('Cabinet Line');
-        //Remove any jobs that are completed
-        if(installStatus[0].value != 'Complete' && moStatus != 'Complete') {
-            recordList.push({
-                id: record.id,
-                name: record.getCellValue('Job ID'),
-                cabinetLine: cabinetLine ? cabinetLine[0].value : null,
-                moStatus: moStatus,
-                moTime: record.getCellValue('MO Time'),
-                quantity: record.getCellValue('Unit Count') ? record.getCellValue('Unit Count')[0].value : 0,
-                priority: record.getCellValue('SortID') || 999
-            });
+        //Remove any jobs that are completed'
+        if(installStatus[0].value == 'Complete' || moStatus.name == 'Complete') {
+            continue;
         }
+        recordList.push({
+            id: record.id,
+            name: record.getCellValue('Job ID'),
+            cabinetLine: cabinetLine ? cabinetLine[0].value : null,
+            moStatus: moStatus,
+            moTime: record.getCellValue('MO Time'),
+            quantity: record.getCellValue('Unit Count') ? record.getCellValue('Unit Count')[0].value : 0,
+            priority: record.getCellValue('SortID') || 999,
+        });
     }
     return recordList
 }
 
-Date.prototype.addWorkDays = function(days) {
+Date.prototype.addWorkDays = function(days, holidays) {
     if(isNaN(days)) {
         console.log("Value provided for \"days\" was not a number");
         return
@@ -101,6 +114,18 @@ Date.prototype.addWorkDays = function(days) {
     if (dow == 0) {
         daysToAdd++;
     }
+    //Determine if the new date is on a holiday
+    const formatter = new Intl.DateTimeFormat('en-US', {
+        month: '2-digit',
+        day: '2-digit'
+    });
+    const formattedDate = formatter.format(newDate.setDate(newDate.getDate() + daysToAdd));
+
+    var holidayArray = holidays ? holidays.split(', ') : [];
+    if(holidayArray.includes(formattedDate)) {
+        daysToAdd++;
+    }
+
     // If the start date plus the additional days falls on or after the closest Saturday calculate weekends
     if (dow + daysToAdd >= 6) {
         //Subtract days in current working week from work days
@@ -115,25 +140,34 @@ Date.prototype.addWorkDays = function(days) {
                 daysToAdd -= 2;
         }
     }
+
     return newDate.setDate(newDate.getDate() + daysToAdd);
 }
 
-async function CalculateEstimation(jobs, workstations, jobsTable) {
+async function CalculateEstimation(jobs, workstations, jobsTable, holidays) {
         try {    
         const results = calculateJobEstimates(8, workstations, jobs);
-
+        
         // Update order records with completion dates
         results.orderCompletions.forEach(completion => {
             // Update the corresponding order record in Airtable
-            let startDate = new Date();
-            startDate = startDate.addWorkDays(completion.startDate-1);
-            let endDate = new Date();
-            endDate = endDate.addWorkDays(completion.endDate-1);
-            jobsTable.updateRecordAsync(completion.orderId, {
-            'Est. Start Date': new Date(startDate),
-            'Est. Complete Date': new Date(endDate),
-            'Days to Complete': completion.totalDays
-            });
+            if(completion.cabinetLine == "JG Customs") {
+                let startDate = new Date();
+                startDate = startDate.addWorkDays(completion.startDate-1, holidays);
+                let endDate = new Date();
+                endDate = endDate.addWorkDays(completion.endDate-1, holidays);
+                jobsTable.updateRecordAsync(completion.orderId, {
+                'Est. Start Date': new Date(startDate),
+                'Est. Complete Date': new Date(endDate),
+                'Days to Complete': completion.totalDays
+                });
+            }else{
+                jobsTable.updateRecordAsync(completion.orderId, {
+                    'Est. Start Date': null,
+                    'Est. Complete Date': null,
+                    'Days to Complete': null
+                    });
+            }
         });
 
         } catch (error) {
@@ -145,13 +179,11 @@ function calculateJobEstimates(hoursPerDay, workstations, jobs) {
 
     const totalPerCabinet = workstations.reduce((sum, ws) => sum + (ws.hoursRequired || 0), 0);
     const totalSetupTime = workstations.reduce((sum, ws) => sum + (ws.setupTime || 0), 0);
-    console.log('Total setup time:', totalSetupTime);
-    console.log('Total hours per cabinet:', totalPerCabinet);
-    let startDate = 1
+    //console.log('Total setup time:', totalSetupTime);
+    //console.log('Total hours per cabinet:', totalPerCabinet);
+    let startDate = 0
     let runningHours = 0 
-    for (let job of jobs){
-        //const jobTotalHours = job.moTime > 0 ? job.moTime : ((job.quantity || 0) * totalPerCabinet) + totalSetupTime;
-        
+    for (let job of jobs){      
         const jobTotalHours = job.cabinetLine == "JG Customs" ? (job.quantity || 0) * totalPerCabinet + totalSetupTime : 0;
         job.totalHours = jobTotalHours;
         job.totalDays = Math.ceil(jobTotalHours / (hoursPerDay*workstations.length));
