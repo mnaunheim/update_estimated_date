@@ -52,7 +52,7 @@ async function FetchInitialData(jobsTable, workstationsTable, configTable) {
     
     //Fetch jobs sorted by SortID
     const opts = {
-        sorts: [{field: 'SortID', direction: 'asc'}]
+        sorts: [{field: 'Needs By', direction: 'asc'}]
     };
     let jobsQuery = await jobsTable.selectRecordsAsync(opts);
 
@@ -90,12 +90,12 @@ function mapJobRecords(records) {
         }
         recordList.push({
             id: record.id,
-            name: record.getCellValue('Job ID'),
+            name: record.getCellValue('Job Name'),
             cabinetLine: cabinetLine ? cabinetLine[0].value : null,
             moStatus: moStatus,
             moTime: record.getCellValue('MO Time'),
             quantity: record.getCellValue('Unit Count') ? record.getCellValue('Unit Count')[0].value : 0,
-            priority: record.getCellValue('SortID') || 999,
+            priority: record.getCellValue('Needs By') || 999,
         });
     }
     return recordList
