@@ -184,7 +184,13 @@ function calculateJobEstimates(hoursPerDay, workstations, jobs) {
     let startDate = 0
     let runningHours = 0 
     for (let job of jobs){      
-        const jobTotalHours = job.cabinetLine == "JG Customs" ? (job.quantity || 0) * totalPerCabinet + totalSetupTime : 0;
+        let jobTotalHours = job.cabinetLine == "JG Customs" ? (job.quantity || 0) * totalPerCabinet + totalSetupTime : 0;
+
+        //Set job hours if they already have MO Time entered
+        if(job.moStatus && job.moStatus.name != 'Not Started' && job.moTime){
+            jobTotalHours = job.moTime;
+        }
+
         job.totalHours = jobTotalHours;
         job.totalDays = Math.ceil(jobTotalHours / (hoursPerDay*workstations.length));
         job.startDate = startDate; 
