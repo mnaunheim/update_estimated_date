@@ -10,13 +10,20 @@ function TodoExtenstion() {
 
     const [tableName, setTableName] = useState('Jobs');
     const [loading, setLoading] = useState(true);
-
+    const [error, setError] = useState(null);
 
     const jobsTable = base.getTableByNameIfExists(tableName);
     const workstationsTable = base.getTableByNameIfExists('Workstations');
     const configTable = base.getTableByNameIfExists('Configuration');
     const view = jobsTable.getViewByNameIfExists('Sorted Grid');
     const girdRecords = useRecordIds(view);
+
+    if (!jobsTable || !workstationsTable || !configTable) {
+        return <div>Error: Required base not found. Base must be named 'Jobs'.</div>;
+    }
+    if (!view) {
+        return <div>Error: 'Sorted Grid' view not found within the Jobs base.</div>;
+    }
     
     useEffect(() => {
         const fetchData = async ()  => {
@@ -28,6 +35,7 @@ function TodoExtenstion() {
                 CalculateEstimation(jobs, workstations, jobsTable, holidays);
             } catch (error) {
                 console.error('Error fetching data:', error);
+                setError(`Error fetching data: ${error.message}`);
             } finally {
                 setLoading(false);
             }
@@ -36,6 +44,7 @@ function TodoExtenstion() {
     }, [girdRecords]);
 
     if (loading) return <div>Updating records...</div>;
+    if(error) return <div>Error updating data: {error}</div>;
     return (
         <div>Records updated.</div>
     );
@@ -84,14 +93,17 @@ function mapJobRecords(records) {
         let installStatus = record.getCellValue('Install Status');
         let moStatus = record.getCellValue('MO Status');
         let cabinetLine = record.getCellValue('Cabinet Line');
+        
         //Remove any jobs that are completed'
-        if(installStatus[0].value == 'Complete' || moStatus.name == 'Complete') {
+        if((installStatus && installStatus.length > 0 && installStatus[0].value == 'Complete') 
+            || (moStatus && moStatus.name == 'Complete')){
             continue;
         }
+
         recordList.push({
             id: record.id,
             name: record.getCellValue('Job Name'),
-            cabinetLine: cabinetLine ? cabinetLine[0].value : null,
+            cabinetLine: (cabinetLine && cabinetLine.length > 0) ? cabinetLine[0].value : null,
             moStatus: moStatus,
             moTime: record.getCellValue('MO Time'),
             quantity: record.getCellValue('Unit Count') ? record.getCellValue('Unit Count')[0].value : 0,
@@ -144,8 +156,7 @@ Date.prototype.addWorkDays = function(days, holidays) {
     return newDate.setDate(newDate.getDate() + daysToAdd);
 }
 
-async function CalculateEstimation(jobs, workstations, jobsTable, holidays) {
-        try {    
+async function CalculateEstimation(jobs, workstations, jobsTable, holidays) {   
         const results = calculateJobEstimates(8, workstations, jobs);
         
         // Update order records with completion dates
@@ -169,10 +180,6 @@ async function CalculateEstimation(jobs, workstations, jobsTable, holidays) {
                     });
             }
         });
-
-        } catch (error) {
-        console.error('Error:', error);
-        } 
     };
 function calculateJobEstimates(hoursPerDay, workstations, jobs) {
     let completedJobs = [];
