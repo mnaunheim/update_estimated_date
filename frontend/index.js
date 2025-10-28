@@ -44,7 +44,7 @@ function TodoExtenstion() {
     }, [girdRecords]);
 
     if (loading) return <div>Updating records...</div>;
-    if(error) return <div>Error updating data: {error}</div>;
+    if(error) return <div>{error}</div>;
     return (
         <div>Records updated.</div>
     );
@@ -93,7 +93,7 @@ function mapJobRecords(records) {
         let installStatus = record.getCellValue('Install Status');
         let moStatus = record.getCellValue('MO Status');
         let cabinetLine = record.getCellValue('Cabinet Line');
-        
+
         //Remove any jobs that are completed'
         if((installStatus && installStatus.length > 0 && installStatus[0].value == 'Complete') 
             || (moStatus && moStatus.name == 'Complete')){
@@ -157,30 +157,44 @@ Date.prototype.addWorkDays = function(days, holidays) {
 }
 
 async function CalculateEstimation(jobs, workstations, jobsTable, holidays) {   
+    try {
         const results = calculateJobEstimates(8, workstations, jobs);
         
-        // Update order records with completion dates
-        results.orderCompletions.forEach(completion => {
-            // Update the corresponding order record in Airtable
-            if(completion.cabinetLine == "JG Customs") {
-                let startDate = new Date();
-                startDate = startDate.addWorkDays(completion.startDate-1, holidays);
-                let endDate = new Date();
-                endDate = endDate.addWorkDays(completion.endDate-1, holidays);
-                jobsTable.updateRecordAsync(completion.orderId, {
-                'Est. Start Date': new Date(startDate),
-                'Est. Complete Date': new Date(endDate),
-                'Days to Complete': completion.totalDays
-                });
-            }else{
-                jobsTable.updateRecordAsync(completion.orderId, {
-                    'Est. Start Date': null,
-                    'Est. Complete Date': null,
-                    'Days to Complete': null
+        // Use Promise.all to handle async updates properly
+        const updatePromises = results.orderCompletions.map(async (completion) => {
+            try {
+                if(completion.cabinetLine == "JG Customs") {
+                    let startDate = new Date();
+                    startDate = startDate.addWorkDays(completion.startDate-1, holidays);
+                    let endDate = new Date();
+                    endDate = endDate.addWorkDays(completion.endDate-1, holidays);
+                    
+                    await jobsTable.updateRecordAsync(completion.orderId, {
+                        'Est. Start Date': new Date(startDate),
+                        'Est. Complete Date': new Date(endDate),
+                        'Days to Complete': completion.totalDays
                     });
+                } else {
+                    await jobsTable.updateRecordAsync(completion.orderId, {
+                        'Est. Start Date': null,
+                        'Est. Complete Date': null,
+                        'Days to Complete': null
+                    });
+                }
+            } catch (error) {
+                console.error(`Error updating record ${completion.orderId}:`, error);
+                // Continue with other updates even if one fails
             }
         });
-    };
+        
+        // Wait for all updates to complete
+        await Promise.all(updatePromises);
+        
+    } catch (error) {
+        console.error('Error when CalculateEstimation:', error);
+        throw error; // Re-throw to be handled by caller
+    }
+}
 function calculateJobEstimates(hoursPerDay, workstations, jobs) {
     let completedJobs = [];
 
