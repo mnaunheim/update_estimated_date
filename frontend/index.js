@@ -30,7 +30,7 @@ function TodoExtenstion() {
             try {
                 setLoading(true);
                 const { workstations, jobs, holidays} = await FetchInitialData(jobsTable, workstationsTable, configTable);
-
+        
                 // Use the fetched data directly, not state
                 CalculateEstimation(jobs, workstations, jobsTable, holidays);
             } catch (error) {
@@ -113,65 +113,66 @@ function mapJobRecords(records) {
     return recordList
 }
 
-Date.prototype.addWorkDays = function(days, holidays) {
-    if(isNaN(days)) {
-        console.log("Value provided for \"days\" was not a number");
-        return
+function addBusinessDays(daysToAdd, holidays = [], startDate = new Date()) {
+  // Normalize holidays to date strings (YYYY-MM-DD) for easy comparison
+  const holidaySet = new Set(
+    holidays.map(h => {
+      const d = h instanceof Date ? h : new Date(h);
+      return d.toISOString().split('T')[0];
+    })
+  );
+  
+  // Helper function to check if a date is a weekend
+  const isWeekend = (date) => {
+    const day = date.getDay();
+    return day === 0 || day === 6; // Sunday or Saturday
+  };
+  
+  // Helper function to check if a date is a holiday
+  const isHoliday = (date) => {
+    const dateStr = date.toISOString().split('T')[0];
+    return holidaySet.has(dateStr);
+  };
+  
+  // Create a new date object to avoid mutating the input
+  const result = new Date(startDate);
+  let addedDays = 0;
+  let weekendsSkipped = 0;
+  let holidaysSkipped = 0;
+  
+  // Add days until we've added the required number of business days
+  while (addedDays < daysToAdd) {
+    result.setDate(result.getDate() + 1);
+    if(addedDays + 1 == daysToAdd && isWeekend(result)){
+        weekendsSkipped++;
     }
-    var newDate = new Date(this.valueOf());
-    // Get the day of the week as a number (0 = Sunday, 1 = Monday, .... 6 = Saturday)
-    var dow = newDate.getDay();
-    var daysToAdd = parseInt(days);
-    // If the current day is Sunday add one day
-    if (dow == 0) {
-        daysToAdd++;
+    if(addedDays + 1 == daysToAdd && isHoliday(result)){
+        holidaysSkipped++;
     }
-    //Determine if the new date is on a holiday
-    const formatter = new Intl.DateTimeFormat('en-US', {
-        month: '2-digit',
-        day: '2-digit'
-    });
-    const formattedDate = formatter.format(newDate.setDate(newDate.getDate() + daysToAdd));
-
-    var holidayArray = holidays ? holidays.split(', ') : [];
-    if(holidayArray.includes(formattedDate)) {
-        daysToAdd++;
+    if (!isWeekend(result)&& !isHoliday(result)) {
+      addedDays++;
     }
-
-    // If the start date plus the additional days falls on or after the closest Saturday calculate weekends
-    if (dow + daysToAdd >= 6) {
-        //Subtract days in current working week from work days
-        var remainingWorkDays = daysToAdd - (5 - dow);
-        //Add current working week's weekend
-        daysToAdd += 2;
-        if (remainingWorkDays > 5) {
-            //Add two days for each working week by calculating how many weeks are included
-            daysToAdd += 2 * Math.floor(remainingWorkDays / 5);
-            //Exclude final weekend if the remainingWorkDays resolves to an exact number of weeks
-            if (remainingWorkDays % 5 == 0)
-                daysToAdd -= 2;
-        }
-    }
-
-    return newDate.setDate(newDate.getDate() + daysToAdd);
+  }
+  
+  return {
+    date: result,
+    skippedDays: weekendsSkipped + holidaysSkipped,
+  };
 }
+
 
 async function CalculateEstimation(jobs, workstations, jobsTable, holidays) {   
     try {
-        const results = calculateJobEstimates(8, workstations, jobs);
+        var holidayArray = holidays ? holidays.split(', ') : [];
+        const results = calculateJobEstimates(8, workstations, jobs, holidayArray);
         
         // Use Promise.all to handle async updates properly
         const updatePromises = results.orderCompletions.map(async (completion) => {
             try {
                 if(completion.cabinetLine == "JG Customs") {
-                    let startDate = new Date();
-                    startDate = startDate.addWorkDays(completion.startDate-1, holidays);
-                    let endDate = new Date();
-                    endDate = endDate.addWorkDays(completion.endDate-1, holidays);
-                    
                     await jobsTable.updateRecordAsync(completion.orderId, {
-                        'Est. Start Date': new Date(startDate),
-                        'Est. Complete Date': new Date(endDate),
+                        'Est. Start Date': completion.startDate,
+                        'Est. Complete Date': completion.endDate,
                         'Days to Complete': completion.totalDays
                     });
                 } else {
@@ -195,7 +196,7 @@ async function CalculateEstimation(jobs, workstations, jobsTable, holidays) {
         throw error; // Re-throw to be handled by caller
     }
 }
-function calculateJobEstimates(hoursPerDay, workstations, jobs) {
+function calculateJobEstimates(hoursPerDay, workstations, jobs, holidayArray) {
     let completedJobs = [];
 
     const totalPerCabinet = workstations.reduce((sum, ws) => sum + (ws.hoursRequired || 0), 0);
@@ -205,17 +206,19 @@ function calculateJobEstimates(hoursPerDay, workstations, jobs) {
     let startDate = 0
     let runningHours = 0 
     for (let job of jobs){      
-        let jobTotalHours = job.cabinetLine == "JG Customs" ? (job.quantity || 0) * totalPerCabinet + totalSetupTime : 0;
+        let jobTotalHours = job.cabinetLine == "JG Customs" ? ((job.quantity || 0) * totalPerCabinet) + totalSetupTime : 0;
 
         //Set job hours if they already have MO Time entered
         if(job.moStatus && job.moStatus.name != 'Not Started' && job.moTime){
             jobTotalHours = job.moTime;
         }
-
         job.totalHours = jobTotalHours;
         job.totalDays = Math.ceil(jobTotalHours / (hoursPerDay*workstations.length));
-        job.startDate = startDate; 
-        job.endDate = startDate + job.totalDays;
+
+        let startDateObj = addBusinessDays(startDate, holidayArray);
+        let endDateObj = addBusinessDays(startDate + job.totalDays, holidayArray);
+        job.startDate = startDateObj.date; 
+        job.endDate = endDateObj.date;
         job.orderId = job.id;
         completedJobs.push(job);
 
@@ -223,6 +226,8 @@ function calculateJobEstimates(hoursPerDay, workstations, jobs) {
         let remainingHours = runningHours % (hoursPerDay*workstations.length);
 
         startDate += Math.floor(runningHours / (hoursPerDay*workstations.length));
+        startDate += startDateObj.skippedDays+endDateObj.skippedDays; //Account for weekends/holidays
+
         if(remainingHours >0){
             runningHours = remainingHours;
         }   
